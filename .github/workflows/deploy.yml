@@ -162,10 +162,17 @@ jobs:
       - name: Move assets to root
         run: mv assets/release.zip release.zip
 
-      - name: Prepare standalone PM2 config
-        shell: bash
+      - uses: actions/checkout@v4
+      
+      - name: Debug
         run: |
-          cp yohaku-deploy-action/pm2/ecosystem.config.js ecosystem.config.js
+          pwd
+          ls -la
+          find . -name ecosystem.config.js
+      
+      - name: Prepare standalone PM2 config
+        run: |
+          cp pm2/ecosystem.config.js ecosystem.config.js
 
       - name: copy file via ssh password
         uses: appleboy/scp-action@v0.1.7
