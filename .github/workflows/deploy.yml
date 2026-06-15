@@ -121,17 +121,18 @@ jobs:
           rm -f assets/release.zip
           (cd apps/web/.next && zip --symlinks -r "$GITHUB_WORKSPACE/assets/release.zip" ./* -x "dev/*" -x "cache/*")
 
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: assets/release.zip
+        
       # - uses: actions/upload-artifact@v4
       #   with:
       #     name: dist
       #     path: assets/release.zip
       #     retention-days: 7
-      - name: Cache Build Artifacts
-        id: cache-primes
-        uses: actions/cache/save@v4
-        with:
-          path: assets
-          key: ${{ github.run_number }}-release
+
 
       - name: Store artifact commit version
         shell: bash
