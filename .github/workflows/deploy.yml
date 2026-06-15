@@ -163,7 +163,11 @@ jobs:
         run: mv assets/release.zip release.zip
 
       - name: Prepare standalone PM2 config
-        run: cp pm2/ecosystem.config.js ecosystem.config.js
+        shell: bash
+        run: |
+          echo "Action path: ${{ github.action_path }}"
+          ls -la "${{ github.action_path }}/pm2"
+          cp "${{ github.action_path }}/pm2/ecosystem.config.js" ./ecosystem.config.js
 
       - name: copy file via ssh password
         uses: appleboy/scp-action@v0.1.7
