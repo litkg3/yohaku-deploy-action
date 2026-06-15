@@ -127,11 +127,11 @@ jobs:
           name: release
           path: assets/release.zip
         
-      # - uses: actions/upload-artifact@v4
-      #   with:
-      #     name: dist
-      #     path: assets/release.zip
-      #     retention-days: 7
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: assets/release.zip
+          retention-days: 7
 
 
       - name: Store artifact commit version
@@ -148,20 +148,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      # - name: Download artifact
-      #   uses: actions/download-artifact@v4
-      #   with:
-      #     name: dist
-
-      - name: Restore cached Build Artifacts
-        id: cache-primes-restore
-        uses: actions/cache/restore@v4
+      - name: Download artifact
+        uses: actions/download-artifact@v4
         with:
-          path: |
-            assets
-          key: ${{ github.run_number }}-release
-      - name: Move assets to root
-        run: mv assets/release.zip release.zip
+           name: dist
 
       - name: Prepare standalone PM2 config
         run: cp pm2/ecosystem.config.js ecosystem.config.js
