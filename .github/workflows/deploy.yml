@@ -19,7 +19,7 @@ env:
   HASH_FILE: build_hash
   SOURCE_REPO: litkg3/Yohaku
   BUILD_COMMAND: pnpm --filter @yohaku/web build:ci
-  STANDALONE_SUBPATH: standalone/apps/web
+  STANDALONE_SUBPATH: apps/web/.next/standalone
 
 jobs:
   prepare:
@@ -163,17 +163,8 @@ jobs:
       - name: Move assets to root
         run: mv assets/release.zip release.zip
 
-      - uses: actions/checkout@v4
-      
-      - name: Debug
-        run: |
-          pwd
-          ls -la
-          find . -name ecosystem.config.js
-      
       - name: Prepare standalone PM2 config
-        run: |
-          cp pm2/ecosystem.config.js ecosystem.config.js
+        run: cp pm2/ecosystem.config.js ecosystem.config.js
 
       - name: copy file via ssh password
         uses: appleboy/scp-action@v0.1.7
