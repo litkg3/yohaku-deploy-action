@@ -245,9 +245,14 @@ jobs:
             echo "Deployed successfully"
   
       - name: After deploy script
+        env:
+          AFTER_DEPLOY_SCRIPT: ${{ secrets.AFTER_DEPLOY_SCRIPT }}
         run: |
           hash=${{ needs.build.outputs.sha_short }}
-          ${{ secrets.AFTER_DEPLOY_SCRIPT }}}}
+      
+          if [ -n "$AFTER_DEPLOY_SCRIPT" ]; then
+            eval "$AFTER_DEPLOY_SCRIPT"
+          fi
   store:
     name: Store artifact commit version
     runs-on: ubuntu-latest
