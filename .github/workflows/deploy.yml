@@ -278,10 +278,19 @@ jobs:
         run: |
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
+      
           git add ${{ env.HASH_FILE }}
-          git commit -a -m "Update hash file"
+      
+          if git diff --cached --quiet; then
+            echo "No changes to commit, skipping"
+            exit 0
+          fi
+      
+          git commit -m "Update hash file"
+      
       - name: Push changes
+        if: success()
         uses: ad-m/github-push-action@master
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ github.ref }}
+          branch: ${{ github.ref_name }}
