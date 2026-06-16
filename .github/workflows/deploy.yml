@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+  # schedule:
+  #   - cron: '0 3 * * *'
   repository_dispatch:
     types: [trigger-workflow]
 
@@ -66,7 +68,6 @@ jobs:
           else
             echo "Hashes do not match. Continuing workflow."
           fi
-
   build:
     name: Build artifact
     runs-on: ubuntu-latest
@@ -117,7 +118,6 @@ jobs:
           mkdir -p assets
           rm -f assets/release.zip
           (cd apps/web/.next && zip --symlinks -r "$GITHUB_WORKSPACE/assets/release.zip" ./* -x "dev/*" -x "cache/*")
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -154,6 +154,13 @@ jobs:
         with:
           name: dist
           path: .
+  
+      - name: Debug files
+        run: |
+          pwd
+          ls -lah
+          find . -name "*.zip"
+          find . -name ecosystem.config.js
   
       - name: Prepare standalone PM2 config
         run: cp pm2/ecosystem.config.js ecosystem.config.js
@@ -271,11 +278,10 @@ jobs:
         run: |
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-      
           git add ${{ env.HASH_FILE }}
-      
-          git commit -m "Update hash file" || echo "No changes, skip commit"
+          git commit -a -m "Update hash file"
+      - name: Push changes
+        uses: ad-m/github-push-action@master
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           branch: ${{ github.ref }}
-      
