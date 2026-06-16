@@ -4,12 +4,12 @@ on:
   push:
     branches:
       - main
-  # schedule:
-  #   - cron: '0 3 * * *'
+
   repository_dispatch:
     types: [trigger-workflow]
 
 permissions: write-all
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -22,7 +22,6 @@ env:
 
 jobs:
   prepare:
-    name: Prepare
     runs-on: ubuntu-latest
     if: ${{ github.event.head_commit.message != 'Update hash file' }}
 
@@ -30,266 +29,186 @@ jobs:
       hash_content: ${{ steps.read_hash.outputs.hash_content }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Read HASH_FILE content
-        id: read_hash
+      - uses: actions/checkout@v4
+
+      - id: read_hash
         run: |
-          content=$(cat ${{ env.HASH_FILE }}) || true
-          echo "hash_content=$content" >> "$GITHUB_OUTPUT"
+          content=$(cat ${{ env.HASH_FILE }} || true)
+          echo "hash_content=$content" >> $GITHUB_OUTPUT
+
   check:
-    name: Check Should Rebuild
     runs-on: ubuntu-latest
     needs: prepare
+
     outputs:
       canceled: ${{ steps.use_content.outputs.canceled }}
 
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: innei-dev/Yohaku
-          token: ${{ secrets.GH_PAT }} # `GH_PAT` is a secret that contains your PAT
+          repository: litkg3/Yohaku
+          token: ${{ secrets.GH_PAT }}
           fetch-depth: 0
-          lfs: true
-          submodules: recursive
 
-      - name: Use content from prev job and compare
-        id: use_content
+      - id: use_content
         env:
           FILE_HASH: ${{ needs.prepare.outputs.hash_content }}
         run: |
-          file_hash=$FILE_HASH
           current_hash=$(git rev-parse --short HEAD)
-          echo "File Hash: $file_hash"
-          echo "Current Git Hash: $current_hash"
-          if [ "$file_hash" == "$current_hash" ]; then
-            echo "Hashes match. Stopping workflow."
+
+          echo "File Hash: $FILE_HASH"
+          echo "Current Hash: $current_hash"
+
+          if [ "$FILE_HASH" = "$current_hash" ]; then
             echo "canceled=true" >> $GITHUB_OUTPUT
-          else
-            echo "Hashes do not match. Continuing workflow."
           fi
+
   build:
-    name: Build artifact
     runs-on: ubuntu-latest
     needs: check
-    if: ${{needs.check.outputs.canceled != 'true'}}
+    if: ${{ needs.check.outputs.canceled != 'true' }}
 
-    strategy:
-      matrix:
-        node-version: [lts/*]
-    outputs:
-      sha_short: ${{ steps.store.outputs.sha_short }}
-      branch: ${{ steps.store.outputs.branch }}
     steps:
       - uses: actions/checkout@v4
         with:
           repository: ${{ env.SOURCE_REPO }}
-          token: ${{ secrets.GH_PAT }} # `GH_PAT` is a secret that contains your PAT
-          fetch-depth: 0
-          lfs: true
-          submodules: recursive
+          token: ${{ secrets.GH_PAT }}
 
-      - name: Checkout LFS objects
-        run: git lfs checkout
       - uses: pnpm/action-setup@v2
 
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
-          cache: 'pnpm'
-      - uses: jongwooo/next-cache@v1
-      - name: Install dependencies
+          node-version: lts/*
+          cache: pnpm
+
+      - name: Install
         run: pnpm install
-      - name: Build project
+
+      - name: Build
         env:
           BASE_URL: ${{ vars.BASE_URL }}
           NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
           NEXT_PUBLIC_GATEWAY_URL: ${{ vars.NEXT_PUBLIC_GATEWAY_URL }}
         run: |
           ${{ env.BUILD_COMMAND }}
+
           cd apps/web/.next
+
           rm -rf cache
+
+          # ✅确保 public 正确进入 standalone
           cp -r ../public ./standalone/public
-          mv ./static ./standalone/apps/web/.next/static
-          cd ./standalone
-          echo ';process.title = "Yohaku (NextJS)"' >> server.js
-          cd "$GITHUB_WORKSPACE"
-          mkdir -p assets
-          rm -f assets/release.zip
-          (zip --symlinks -r "$GITHUB_WORKSPACE/assets/release.zip" ./*)
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release
-          path: assets/release.zip
-        
+
+          # ❌关键修复：只打 standalone，不要 apps/web
+          zip -qr release.zip standalone
+
+          cd ../../
+
+          mkdir -p ../../assets
+          mv apps/web/.next/release.zip ../../assets/
+
       - uses: actions/upload-artifact@v4
         with:
           name: dist
           path: assets/release.zip
-          retention-days: 7
 
-
-      - name: Store artifact commit version
-        shell: bash
+      - name: Store hash
         id: store
         run: |
-          sha_short=$(git rev-parse --short HEAD)
-          branch_name=$(git rev-parse --abbrev-ref HEAD)
-          echo "sha_short=$sha_short" >> "$GITHUB_OUTPUT"
-          echo "branch=$branch_name" >> "$GITHUB_OUTPUT"
-  
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
   deploy:
-    name: Deploy artifact
     runs-on: ubuntu-latest
     needs: build
-  
+
     steps:
-      - name: Checkout deploy repository
-        uses: actions/checkout@v4
-  
-      - name: Download artifact
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: dist
           path: .
-  
-      - name: Debug files
+
+      - name: Debug
         run: |
-          pwd
           ls -lah
-          find . -name "*.zip"
-          find . -name ecosystem.config.js
-  
-      - name: Prepare standalone PM2 config
-        run: cp pm2/ecosystem.config.js ecosystem.config.js
-  
-      - name: Upload release.zip
+
+      - name: Upload zip
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}
-          password: ${{ secrets.PASSWORD }}
           key: ${{ secrets.KEY }}
           port: ${{ secrets.PORT }}
           source: "release.zip"
           target: "/tmp/yohaku"
-  
-      - name: Upload ecosystem config
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USER }}
-          password: ${{ secrets.PASSWORD }}
-          key: ${{ secrets.KEY }}
-          port: ${{ secrets.PORT }}
-          source: "ecosystem.config.js"
-          target: "/tmp/yohaku"
-  
-      - name: Exec deploy script with SSH
+
+      - name: SSH Deploy
         uses: appleboy/ssh-action@master
         with:
-          command_timeout: 5m
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USER }}
-          password: ${{ secrets.PASSWORD }}
           key: ${{ secrets.KEY }}
           port: ${{ secrets.PORT }}
           script: |
             set -e
-  
-            source $HOME/.bashrc || true
-  
+
             basedir=$HOME/yohaku
             workdir=$basedir/${{ github.run_number }}
-  
-            mkdir -p $workdir
-            mkdir -p $basedir/.cache
-  
-            mv /tmp/yohaku/release.zip $workdir/release.zip
-  
-            install -m 644 /tmp/yohaku/ecosystem.config.js $basedir/ecosystem.config.js
-  
-            cd $workdir
-            unzip -qq -o release.zip
-  
-            rm -rf /tmp/yohaku
-  
-            rm -f $workdir/${{ env.STANDALONE_SUBPATH }}/.env
-            ln -sf $basedir/.env $workdir/${{ env.STANDALONE_SUBPATH }}/.env
-  
-            export NEXT_SHARP_PATH=$(npm root -g)/sharp
-  
-            ln -sf $workdir/${{ env.STANDALONE_SUBPATH }}/server.js $basedir/server.js
-  
-            mkdir -p $workdir/${{ env.STANDALONE_SUBPATH }}/.next
-  
-            rm -rf $workdir/${{ env.STANDALONE_SUBPATH }}/.next/cache
-            ln -sf $basedir/.cache $workdir/${{ env.STANDALONE_SUBPATH }}/.next/cache
-  
-            cd $basedir
-  
-            if pm2 describe Yohaku >/dev/null 2>&1; then
-              pm2 reload ecosystem.config.js --update-env
-            else
-              pm2 start ecosystem.config.js --update-env
-            fi
-  
-            rm -f $workdir/release.zip
-  
-            pm2 save
-  
-            echo "Deployed successfully"
-  
-      - name: After deploy script
-        env:
-          AFTER_DEPLOY_SCRIPT: ${{ secrets.AFTER_DEPLOY_SCRIPT }}
-        run: |
-          hash=${{ needs.build.outputs.sha_short }}
-      
-          if [ -n "$AFTER_DEPLOY_SCRIPT" ]; then
-            eval "$AFTER_DEPLOY_SCRIPT"
-          fi
-  store:
-    name: Store artifact commit version
-    runs-on: ubuntu-latest
-    needs: [deploy, build]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          persist-credentials: false # otherwise, the token used is the GITHUB_TOKEN, instead of your personal token
-          fetch-depth: 0 # otherwise, you will failed to push refs to dest repo
-      # Get the commit version from the build job
-      - name: Use outputs from build
-        env:
-          SHA_SHORT: ${{ needs.build.outputs.sha_short }}
-          BRANCH: ${{ needs.build.outputs.branch }}
-        run: |
-          echo "SHA Short from build: $SHA_SHORT"
-          echo "Branch from build: $BRANCH"
-      - name: Write hash to file
-        env:
-          SHA_SHORT: ${{ needs.build.outputs.sha_short }}
 
-        run: echo $SHA_SHORT > ${{ env.HASH_FILE }}
-      - name: Commit files
+            mkdir -p $workdir
+
+            mv /tmp/yohaku/release.zip $workdir/release.zip
+
+            cd $workdir
+            unzip -q release.zip
+
+            # ✅安全处理 .env
+            if [ -f $basedir/.env ]; then
+              ln -sf $basedir/.env standalone/.env || true
+            fi
+
+            # ✅固定 server.js（避免 22/23 漂移）
+            ln -sf $workdir/standalone/server.js $basedir/server.js || true
+
+            # cache
+            mkdir -p standalone/.next
+            ln -sf $basedir/.cache standalone/.next/cache || true
+
+            cd $basedir
+
+            if pm2 describe Yohaku >/dev/null 2>&1; then
+              pm2 reload Yohaku --update-env
+            else
+              pm2 start server.js --name Yohaku
+            fi
+
+            pm2 save
+            echo "Deployed successfully"
+
+  store:
+    runs-on: ubuntu-latest
+    needs: deploy
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write hash
+        run: echo ${{ needs.build.outputs.sha_short }} > ${{ env.HASH_FILE }}
+
+      - name: Commit
         run: |
-          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-      
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+
           git add ${{ env.HASH_FILE }}
-      
+
           if git diff --cached --quiet; then
-            echo "No changes to commit, skipping"
+            echo "no change"
             exit 0
           fi
-      
+
           git commit -m "Update hash file"
-      
-      - name: Push changes
-        if: success()
+
+      - name: Push
         uses: ad-m/github-push-action@master
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
