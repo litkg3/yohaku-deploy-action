@@ -117,7 +117,7 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           mkdir -p assets
           rm -f assets/release.zip
-          (cd apps/web/.next && zip --symlinks -r "$GITHUB_WORKSPACE/assets/release.zip" ./* -x "dev/*" -x "cache/*")
+          (zip --symlinks -r "$GITHUB_WORKSPACE/assets/release.zip" ./*)
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
