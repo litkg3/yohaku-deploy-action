@@ -155,13 +155,6 @@ jobs:
           name: dist
           path: .
   
-      - name: Debug files
-        run: |
-          pwd
-          ls -lah
-          find . -name "*.zip"
-          find . -name ecosystem.config.js
-  
       - name: Prepare standalone PM2 config
         run: cp pm2/ecosystem.config.js ecosystem.config.js
   
