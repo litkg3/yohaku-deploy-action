@@ -18,7 +18,7 @@ env:
   HASH_FILE: build_hash
   SOURCE_REPO: litkg3/Yohaku
   BUILD_COMMAND: pnpm --filter @yohaku/web build:ci
-  STANDALONE_SUBPATH: standalone
+  STANDALONE_SUBPATH: standalone/apps/web
 
 jobs:
   prepare:
