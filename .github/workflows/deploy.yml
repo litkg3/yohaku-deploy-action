@@ -213,9 +213,6 @@ jobs:
   
             cd $workdir
             unzip -qq -o release.zip
-            ln -sfn \
-            $workdir/standalone/public \
-            $workdir/standalone/apps/web/public
             rm -rf /tmp/yohaku
   
             rm -f $workdir/${{ env.STANDALONE_SUBPATH }}/.env
